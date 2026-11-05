@@ -43,6 +43,8 @@ header h1{max-width:none;white-space:nowrap;font-size:clamp(10px,3.2vw,32px);lin
 #filters #tool{appearance:none;-webkit-appearance:none;background-position:right 16px center;background-size:20px 20px;padding:12px 48px 12px 14px;height:48px;font-size:16px;line-height:24px}
 #filter-panel #reset{display:block;margin:2px 0 0 auto}
 @media(max-width:480px){#toggle-filters{padding:10px 12px}.search-toolbar{gap:8px}#filter-panel{padding:16px}}
+details,.block,#filter-panel{box-sizing:border-box}
+@media(prefers-reduced-motion:reduce){summary::after{transition:none}}
 </style></head><body><main><header><h1>Программа акселератора Платформы роста</h1></header>
 
 <input id="stream" type="hidden"><input id="platform" type="hidden" value="tg">
@@ -73,7 +75,37 @@ async function load(){const id=++requestId, stream=$('stream').value,platform=$(
  finally{if(id===requestId){$('loading').hidden=true;}}
 }
 function selectionChanged(){if(window.google?.script?.history)google.script.history.replace({}, {stream:$('stream').value,platform:$('platform').value});else{const u=new URL(location.href);u.searchParams.set('stream',$('stream').value);u.searchParams.set('platform',$('platform').value);history.replaceState({},'',u);}load();}
-$('toggle-filters').onclick=()=>{const panel=$('filter-panel');panel.hidden=!panel.hidden;$('toggle-filters').setAttribute('aria-expanded',String(!panel.hidden));};$('search').oninput=render;$('tool').onchange=render;$('reset').onclick=()=>{$('search').value='';$('tool').value='';render();};
+
+const panelAnimations=new WeakMap();
+function animatePanel(panel,open){
+ const previous=panelAnimations.get(panel),start=panel.getBoundingClientRect().height;
+ if(previous)previous.cancel();
+ if(open)panel.hidden=false;
+ const end=open?panel.scrollHeight:0;
+ if(matchMedia('(prefers-reduced-motion: reduce)').matches){panel.hidden=!open;return;}
+ const animation=panel.animate([{height:start+'px',opacity:open?0:1},{height:end+'px',opacity:open?1:0}],{duration:240,easing:'cubic-bezier(.2,.7,.2,1)'});
+ panel.style.overflow='hidden';panelAnimations.set(panel,animation);
+ animation.onfinish=()=>{panel.hidden=!open;panel.style.overflow='';panelAnimations.delete(panel);};
+}
+const detailAnimations=new WeakMap();
+document.addEventListener('click',event=>{
+ const summary=event.target.closest('summary');if(!summary)return;
+ const details=summary.parentElement;if(details.tagName!=='DETAILS')return;
+ event.preventDefault();
+ const previous=detailAnimations.get(details),start=details.getBoundingClientRect().height;
+ const open=details.dataset.expanding!=='true'&&(!details.open||details.dataset.expanding==='false');
+ if(previous)previous.cancel();
+ details.dataset.expanding=String(open);
+ const closed=summary.getBoundingClientRect().height+parseFloat(getComputedStyle(details).paddingTop)+parseFloat(getComputedStyle(details).paddingBottom)+parseFloat(getComputedStyle(details).borderTopWidth)+parseFloat(getComputedStyle(details).borderBottomWidth);
+ details.open=true;
+ const end=open?details.getBoundingClientRect().height:closed;
+ if(matchMedia('(prefers-reduced-motion: reduce)').matches){details.open=open;delete details.dataset.expanding;return;}
+ details.style.overflow='hidden';
+ const animation=details.animate([{height:start+'px'},{height:end+'px'}],{duration:260,easing:'cubic-bezier(.2,.7,.2,1)'});detailAnimations.set(details,animation);
+ animation.onfinish=()=>{details.open=open;details.style.overflow='';delete details.dataset.expanding;detailAnimations.delete(details);};
+});
+
+$('toggle-filters').onclick=()=>{const panel=$('filter-panel'),open=$('toggle-filters').getAttribute('aria-expanded')!=='true';$('toggle-filters').setAttribute('aria-expanded',String(open));animatePanel(panel,open);};$('search').oninput=render;$('tool').onchange=render;$('reset').onclick=()=>{$('search').value='';$('tool').value='';render();};
 function init(p){if(p.platform&&!['tg','vk'].includes(p.platform)){$('error').hidden=false;$('error').textContent='Не удалось определить платформу. Откройте ссылку из вашего канала.'; $('loading').hidden=true;return;}$('platform').value=p.platform||'tg';if(!p.stream){$('error').hidden=false;$('error').textContent='Откройте программу по ссылке из вашего канала.';$('loading').hidden=true;return;}$('stream').value=p.stream;load();}
 if(window.google?.script?.url)google.script.url.getLocation(loc=>init(loc.parameter));else{const script=document.createElement('script');script.src='local-adapter.js';script.onload=()=>{init(Object.fromEntries(new URLSearchParams(location.search)));};script.onerror=()=>{$('error').hidden=false;$('error').textContent='Для локального просмотра выполните сборку прототипа.';$('loading').hidden=true;};document.head.append(script);}
 </script></body></html>

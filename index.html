@@ -93,16 +93,22 @@ document.addEventListener('click',event=>{
  const details=summary.parentElement;if(details.tagName!=='DETAILS')return;
  event.preventDefault();
  const previous=detailAnimations.get(details),start=details.getBoundingClientRect().height;
- const open=details.dataset.expanding!=='true'&&(!details.open||details.dataset.expanding==='false');
- if(previous)previous.cancel();
+ const open=details.dataset.expanding?details.dataset.expanding!=='true':!details.open;
+ if(previous){previous.cancelled=true;previous.animation?.cancel();}
+ const task={cancelled:false,animation:null};detailAnimations.set(details,task);
  details.dataset.expanding=String(open);
- const closed=summary.getBoundingClientRect().height+parseFloat(getComputedStyle(details).paddingTop)+parseFloat(getComputedStyle(details).paddingBottom)+parseFloat(getComputedStyle(details).borderTopWidth)+parseFloat(getComputedStyle(details).borderBottomWidth);
- details.open=true;
- const end=open?details.getBoundingClientRect().height:closed;
- if(matchMedia('(prefers-reduced-motion: reduce)').matches){details.open=open;delete details.dataset.expanding;return;}
- details.style.overflow='hidden';
- const animation=details.animate([{height:start+'px'},{height:end+'px'}],{duration:260,easing:'cubic-bezier(.2,.7,.2,1)'});detailAnimations.set(details,animation);
- animation.onfinish=()=>{details.open=open;details.style.overflow='';delete details.dataset.expanding;detailAnimations.delete(details);};
+ if(matchMedia('(prefers-reduced-motion: reduce)').matches){details.open=open;details.style.height='';details.style.overflow='';delete details.dataset.expanding;return;}
+ const css=getComputedStyle(details);
+ const border=parseFloat(css.borderTopWidth)+parseFloat(css.borderBottomWidth);
+ const closed=summary.getBoundingClientRect().height+parseFloat(css.paddingTop)+parseFloat(css.paddingBottom)+border;
+ // Hold the closed height while the browser lays out previously hidden content.
+ details.style.height=start+'px';details.style.overflow='hidden';details.open=true;
+ requestAnimationFrame(()=>requestAnimationFrame(()=>{
+   if(task.cancelled)return;
+   const end=open?details.scrollHeight+border:closed;
+   task.animation=details.animate([{height:start+'px'},{height:end+'px'}],{duration:300,easing:'cubic-bezier(.2,.7,.2,1)',fill:'forwards'});
+   task.animation.onfinish=()=>{if(task.cancelled)return;details.open=open;details.style.height='';details.style.overflow='';task.animation.cancel();delete details.dataset.expanding;detailAnimations.delete(details);};
+ }));
 });
 
 $('toggle-filters').onclick=()=>{const panel=$('filter-panel'),open=$('toggle-filters').getAttribute('aria-expanded')!=='true';$('toggle-filters').setAttribute('aria-expanded',String(open));animatePanel(panel,open);};$('search').oninput=render;$('tool').onchange=render;$('reset').onclick=()=>{$('search').value='';$('tool').value='';render();};
